@@ -1,0 +1,102 @@
+# .htaccess for rndo
+# Advanced clean URL rewrites, security headers, and common hardening rules.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+    DirectoryIndex index.php
+
+    # Protect hidden files and directories
+    RewriteRule "^(\.|\.well-known/|composer\.json|composer\.lock|README\.md|LICENSE|phpunit\.xml)$" - [F,L,NC]
+
+    # Block access to sensitive folders
+    RewriteRule "^(admin|config|app|database|storage)/" - [F,L,NC]
+
+    # Prevent direct access to PHP files in views
+    RewriteRule "^views/.*\.php$" - [F,L,NC]
+
+    # Legacy query-string redirects for old route patterns
+    RewriteCond %{THE_REQUEST} \s/index\.php\?route=category&slug=([^\s&]+) [NC]
+    RewriteRule ^index\.php$ /category/%1? [R=301,L,NE]
+
+    RewriteCond %{THE_REQUEST} \s/index\.php\?route=category(?:&|\s|$) [NC]
+    RewriteRule ^index\.php$ /categories? [R=301,L,NE]
+
+    RewriteCond %{THE_REQUEST} \s/index\.php\?route=search&?q=([^\s&]*) [NC]
+    RewriteRule ^index\.php$ /search/%1? [R=301,L,NE]
+
+    # Clean URL routing to index.php
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^categories/?$ index.php [L,QSA]
+    RewriteRule ^category/([^/]+)/?$ index.php [L,QSA]
+    RewriteRule ^search/?$ index.php [L,QSA]
+    RewriteRule ^search/(.+)/?$ index.php [L,QSA]
+    RewriteRule ^error/?$ index.php [L,QSA]
+    RewriteRule ^404/?$ index.php [L,QSA]
+    RewriteRule ^([^/]+)/([^/]+)/?$ index.php [L,QSA]
+    RewriteRule ^(sitemap\.php|robots\.php|llms\.php|api/.*)$ $1 [L,QSA]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://api.openrouter.ai https://integrate.api.nvidia.com https://generativelanguage.googleapis.com; frame-ancestors 'self'; base-uri 'self';"
+
+    # Prevent MIME sniffing for known static file types
+    <FilesMatch "\.(js|css|xml|json|webp|avif|svg|ttf|woff|woff2)$">
+        Header set X-Content-Type-Options "nosniff"
+    </FilesMatch>
+</IfModule>
+
+<IfModule mod_env.c>
+    SetEnvIf Request_URI "\.(?:pdf|jpe?g|png|gif|svg|webp|avif)$" image_request=1
+</IfModule>
+
+# Remove PHP version from headers when possible
+<IfModule mod_php7.c>
+    php_flag expose_php Off
+</IfModule>
+<IfModule mod_php.c>
+    php_flag expose_php Off
+</IfModule>
+
+# Cache policy for assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/webp "access plus 30 days"
+    ExpiresByType image/avif "access plus 30 days"
+    ExpiresByType image/jpeg "access plus 30 days"
+    ExpiresByType image/png "access plus 30 days"
+    ExpiresByType image/svg+xml "access plus 30 days"
+    ExpiresByType text/css "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+    ExpiresByType text/html "access plus 1 hour"
+</IfModule>
+
+# Disable directory indexing
+Options -Indexes
+
+# Prevent ETag to reduce fingerprinting
+FileETag None
+
+# Block common abuse patterns
+<IfModule mod_rewrite.c>
+    RewriteCond %{REQUEST_URI} \.(?:inc|bak|sql|ini|phps|sh|bash|ps1|mdb|log)$ [NC]
+    RewriteRule .* - [F,L]
+
+    RewriteCond %{QUERY_STRING} (?:\b(?:UNION|SELECT|INSERT|UPDATE|DELETE|DROP|CAST|DECLARE)\b) [NC]
+    RewriteRule .* - [F,L]
+</IfModule>
+
+# Avoid sending ETag header
+Header unset ETag
+
+# Custom error documents
+ErrorDocument 404 /error
+ErrorDocument 403 /error
+ErrorDocument 500 /error
